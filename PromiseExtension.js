@@ -1,36 +1,52 @@
-Promise.some = function(arr) {
-    var rejectionlessPromises = [];
-    var reasons = [];
-    var rejectionCount = 0;
+/**
+ * A complementary function to Promise.all(), this function also takes an array
+ * of Promises and attempts to resolve all of them, resolving with the first 
+ * promise to resolve - like Promise.race() - but will reject ONLY IF ALL of 
+ * them reject.  
+ *
+ * @param {[Promise]} promises The array of promises to attempt resolving
+ * @returns {Promise} Resolves with first resolution, or rejects with all reasons
+ *          if all reject
+ */
+Promise.some = function(promises) {
+  var rejectionlessPromises = [];
+  var reasons = [];
+  var rejectionCount = 0;
 
-    return new Promise(function(resolve, reject){
-        if (!arr || arr.length === 0) {
-            return resolve([]);
-        }
+  return new Promise(function(resolve, reject) {
+    if (!promises || promises.length === 0) {
+      return resolve([]);
+    }
 
-        for (var i = arr.length; i--;) {
-            if (arr[i] instanceof Promise) {
-                rejectionlessPromises.push(arr[i].then(resolve, rejectLastFailure));
-            } else {
-                reject("Only Promises can be used with Promise.some()");
-            }
-        }
+    for (var i = promises.length; i--;) {
+      if (promises[i] instanceof Promise) {
+        rejectionlessPromises.push(promises[i].then(resolve, rejectLastFailure));
+      } else {
+        reject("Only Promises can be used with Promise.some()");
+      }
+    }
 
-        Promise.race(rejectionlessPromises);
+    Promise.race(rejectionlessPromises);
 
-        function rejectLastFailure(reason){
-            reasons.push(reason);
-            if (++rejectionCount === arr.length) {
-                reject(reasons);
-            }
-        }
-    });
+    function rejectLastFailure(reason) {
+      reasons.push(reason);
+      if (++rejectionCount === promises.length) {
+        reject(reasons);
+      }
+    }
+  });
 };
 
-Promise.none = function(arr) {
-    return new Promise(function(resolve, reject){
-        Promise.some(arr).then(reject, resolve);
-    });
+/**
+ * The negation of Promise.some().
+ *
+ * @param {[Promise]} promises The array of promises to attempt resolving
+ * @returns {Promise} Rejects with first resolution, or resolves if all reject
+ */
+Promise.none = function(promises) {
+  return new Promise(function(resolve, reject) {
+    Promise.some(promises).then(reject, resolve);
+  });
 };
 
 /**
@@ -44,63 +60,63 @@ Promise.none = function(arr) {
  * @param {Number} [attempts] The number of times to try to resolve the function
  */
 Promise.try = function(fn, time, attempts) {
-    var attemptNum = 0;
-    var maxAttempts = attempts || 0;
-    var times = [].concat(time);
-    var reasons = [];
-    var timeToWait;
+  var attemptNum = 0;
+  var maxAttempts = attempts || 0;
+  var times = [].concat(time);
+  var reasons = [];
+  var timeToWait;
 
-    if (typeof fn !== "Function") {
-        return Promise.resolve(fn);
-    }
+  if (typeof fn !== "Function") {
+    return Promise.resolve(fn);
+  }
 
-    return (function attempt() {
-        return Promise.race([fn, timeoutPromiseFactory()])
-            .catch(function(reason) {
-                reasons.push(reason);
-                if (attemptNum++ < maxAttempts) {
-                    attempt();
-                } else {
-                    return Promise.reject(reasons);
-                }
-            });
-    })();
-
-    function timeoutPromiseFactory() {
-        var timeoutPromise;
-
-        if (times.length) {
-            timeToWait = time.pop();
-        }
-
-        if (typeof timeToWait === "Number" && !timeToWait && isFinite(timeToWait)) {
-            timeoutPromise = new Promise(function(resolve, reject){
-                setTimeout(reject, timeToWait);
-            });
+  return (function attempt() {
+    return Promise.race([fn, timeoutPromiseFactory()])
+      .catch(function(reason) {
+        reasons.push(reason);
+        if (attemptNum++ < maxAttempts) {
+          attempt();
         } else {
-            timeoutPromise = new Promise(); //Never rejects, i.e. never times out
+          return Promise.reject(reasons);
         }
+      });
+  })();
 
-        return timeoutPromise;
+  function timeoutPromiseFactory() {
+    var timeoutPromise;
+
+    if (times.length) {
+      timeToWait = time.pop();
     }
+
+    if (typeof timeToWait === "Number" && !timeToWait && isFinite(timeToWait)) {
+      timeoutPromise = new Promise(function(resolve, reject) {
+        setTimeout(reject, timeToWait);
+      });
+    } else {
+      timeoutPromise = new Promise(); //Never rejects, i.e. never times out
+    }
+
+    return timeoutPromise;
+  }
 };
 
 Promise.prototype.always = function(fn) {
-    return this.then(fn,fn);
+  return this.then(fn, fn);
 };
 
 
 //For testing
 function promiseFactory(shouldResolve, val, timeToWait) {
-    return function(){
-        return new Promise(function(resolve, reject){
-            setTimeout(function(){
-                if (shouldResolve) {
-                    resolve(val);
-                } else {
-                    reject(val);
-                }
-            }, timeToWait);
-        });
-    };
+  return function() {
+    return new Promise(function(resolve, reject) {
+      setTimeout(function() {
+        if (shouldResolve) {
+          resolve(val);
+        } else {
+          reject(val);
+        }
+      }, timeToWait);
+    });
+  };
 }
